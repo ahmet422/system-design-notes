@@ -62,7 +62,68 @@ Do not skip to Part 7 without being comfortable with Parts 1–6.
 
 ### My Notes – Part 1
 
-> _Add your notes here as you study each topic._
+#### How the internet works
+
+**DNS (Domain Name System)** — "Phone book" for the internet. A domain (e.g. `appxyz.com`) is mapped to one or more IP addresses. When someone types a domain, the **name is resolved to an IP** (we say "resolved," not "redirected" — redirect is when HTTP tells the browser to go to another URL). The DNS resolver (e.g. ISP or 8.8.8.8) may return multiple IPs; the **client** (browser/OS) selects one; for big providers like Google, DNS is often geographic or load-aware so you get an IP that's close or less loaded.
+
+**Protocol** — A set of rules for actors trying to communicate. Application-layer protocols include: DNS (resolve names to IPs), DHCP (auto-assign IPs), FTP (file transfer), HTTP (web pages/resources), IMAP/POP3/SMTP (email), IRC (chat).
+
+**TCP/IP** — Network model. **TCP** (Transport) breaks data into segments, delivers them reliably, and hands off to **IP** (Network). IP adds logical addressing and routing. Terminology: we say **congestion control** (not "congestion throttling") when TCP slows down on packet loss. TCP **establishes a connection** (not "the network") between client and server.
+
+**TCP steps:** (1) **Three-way handshake** — connection establishment (SYN, SYN-ACK, ACK). (2) **Data transfer** — error-free, ordered, with retransmission of lost data, duplicate discard, congestion control. (3) **Four-way handshake** — connection termination.
+
+**Layers (high level):** Application (HTTP, DNS, …) → Transport (TCP or UDP) → Network (IP: addressing, routing) → Data Link → Physical.
+
+**Packets** — At the Network (IP) layer, data is sent in **packets** (each has source/dest IP, payload). Packets can take different paths and be reassembled at the destination. TCP segments are carried inside IP packets.
+
+**UDP** — The other main transport option: no connection, no guarantee of delivery or order. Used where speed matters more than reliability (e.g. DNS queries, live video, gaming). TCP = reliable, ordered; UDP = best effort.
+
+**HTTPS** — HTTP over **TLS**; TLS sits between HTTP and TCP and encrypts the data. So for HTTPS: Application (HTTP) → TLS (encryption) → TCP → IP → …
+
+**Request sequence** (e.g. typing `https://appxyz.com/page`): DNS resolution (name → IP) → client picks one IP if multiple returned → **TCP handshake** (establish connection) → **TLS handshake** (encrypt channel) → **HTTP request/response**.
+
+**Diagram — What happens when you type a URL (e.g. https://appxyz.com/page):**
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant DNS as DNS_Resolver
+    participant Server
+
+    Browser->>DNS: "What is IP for appxyz.com?"
+    DNS-->>Browser: "93.184.216.34"
+    Browser->>Server: TCP handshake (SYN, SYN-ACK, ACK)
+    Server-->>Browser: Connection established
+    Browser->>Server: TLS handshake (encrypt channel)
+    Browser->>Server: HTTP request (e.g. GET /page)
+    Server-->>Browser: HTTP response (HTML, etc.)
+```
+
+**Why that diagram** — Sequence diagram shows order of steps and who talks to whom. Solid arrow = request, dashed = response. Order is DNS → TCP → TLS → HTTP because each step depends on the previous.
+
+**Brief history:** ARPANET used NCP; then **TCP/IP** (early 1980s) became the standard. **DNS** (1980s) so we didn't have to remember numeric addresses. **HTTP** (1990s) for the web; **HTTPS** (HTTP + TLS) became the norm for secure traffic.
+
+**Architectures:** Client–server (client requests, server responds with HTTP or other messages); peer-to-peer.
+
+#### Client–Server model
+
+_Notes to add._
+
+#### Request lifecycle walkthrough
+
+_Notes to add._
+
+#### APIs
+
+_Notes to add._
+
+#### Databases: SQL vs NoSQL
+
+_Notes to add._
+
+#### Networking basics
+
+_Notes to add._
 
 ---
 

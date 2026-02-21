@@ -107,23 +107,171 @@ sequenceDiagram
 
 #### Client–Server model
 
-_Notes to add._
+**Summary:** Architecture where client sends requests over the network (to an IP, after DNS resolution of the hostname). Server = the **application** that listens and responds; it often uses a **database** as a separate component for storage. Request has **HTTP method** (not "command"), headers, and optionally body; response has status code, headers, body. REST uses HTTP methods for CRUD (GET/POST/PUT/DELETE, PATCH). **Statelessness**: each request is self-contained; server doesn't rely on memory of past requests (any instance can handle any request — good for scaling). Key headers: **Authorization** (who you are), **Content-Type** (body format), **Accept** (response format), **Cache-Control** (caching hints).
+
+**HTTP status codes (must-know)**
+
+| Range | Meaning | Key examples |
+|-------|---------|--------------|
+| 2xx | Success | 200 OK, 201 Created, 204 No Content |
+| 3xx | Redirection | 301 Moved Permanently, 302 Found, 304 Not Modified (cache) |
+| 4xx | Client error | 400 Bad Request, 401 Unauthorized (not authenticated), 403 Forbidden (authenticated but not allowed), 404 Not Found, 409 Conflict |
+| 5xx | Server error | 500 Internal Server Error, 502 Bad Gateway, 503 Service Unavailable |
+
+Interview tip: 4xx = client's fault (don't retry same request); 5xx = server's fault (retry can make sense). 401 = "who are you?" vs 403 = "you're not allowed."
+
+**Path params vs query params**
+
+- **Path params** — Part of the URL path; identify *which* resource. E.g. `/movies/3`, `/users/abc123`. Use for resource IDs, required identifiers.
+- **Query params** — After `?`; filter, sort, or optional options. E.g. `?language=english`, `?page=2&limit=10`, `?sort=date`. Use for filters, pagination, sort order.
+- Rule of thumb: **path = identity of resource**, **query = how to filter or shape the result**. Example: `GET /movies/3?language=english` — path = which movie, query = variant/option.
+
+**Other REST principles (besides statelessness)**
+
+- **Resource-oriented URLs** — URLs name resources (nouns), not actions. Good: `GET /movies/3`. Avoid: `GET /getMovie?id=3`.
+- **HTTP methods carry meaning** — GET = read, POST = create, PUT = replace, PATCH = partial update, DELETE = remove.
+- **Idempotency** — GET, PUT, DELETE are idempotent (same request again = same effect; safe to retry). POST is not (each call can create a new resource). Important for retries (see Part 2.5).
+- **Safe methods** — GET (and HEAD) don't change server state.
+- **Versioning** — So API can evolve without breaking clients. Common: path (`/v1/movies`) or header (`Accept: application/vnd.myapi.v1+json`).
+
+**Brief history**
+
+Before: ad-hoc RPC-style APIs. **2000**: Roy Fielding defined **REST** in his PhD thesis as an architectural style for the web (resources, URIs, standard HTTP methods, statelessness). **Mid–late 2000s**: REST over HTTP became the default for public APIs (JSON + resource URLs + GET/POST/PUT/DELETE). "RESTful" = APIs that follow these ideas. REST is a *style* of using HTTP, not a separate protocol.
+
+**When REST is not the best fit**
+
+Real-time (WebSockets, SSE), very chatty or low-latency internal services (sometimes gRPC), or when the client needs a very flexible query (GraphQL). For CRUD over the web and most public APIs, REST is the default.
+
+**Checklist:** Status codes (2xx/4xx/5xx, 401 vs 403) | Path = resource, query = filter/options | REST: resource URLs, method semantics, stateless, idempotency of GET/PUT/DELETE, versioning | History: Fielding, REST as style | Idempotency matters for retries; non-REST for real-time/gRPC/GraphQL.
 
 #### Request lifecycle walkthrough
 
-_Notes to add._
+**What it is:** The path a single request takes from the moment the user triggers an action (e.g. button click, entering a URL) until the response is back. The click or navigation creates an HTTP request; that request passes through several hops before the server can respond, and the response travels back the same way.
+
+**Read path (e.g. GET /movies/3):**
+
+1. **Client** — User action triggers request. Browser resolves hostname via **DNS**, establishes **TCP** connection, does **TLS** handshake (if HTTPS), then sends **HTTP request**.
+2. **Load balancer** — Receives request, picks one **app server** (e.g. round-robin), forwards request. Adds little latency.
+3. **App server** — Receives request. Needs data: checks **cache** first.
+4. **Cache** — If **hit**: return cached data (no DB). If **miss**: go to database.
+5. **Database** — On cache miss, app server queries DB, gets data, can store in cache for next time, then builds response.
+6. **Response** — Travels back: App server → Load balancer → Client. Browser renders or uses the data.
+
+**Where latency is introduced:** DNS lookup, TCP+TLS handshakes, network RTT, app server processing, cache lookup (small), database query (often the slowest on cache miss). Caching reduces DB load and shortens the path when data is hot.
+
+**Diagram — Request lifecycle (read path):**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Browser
+    participant DNS
+    participant LB as LoadBalancer
+    participant App as AppServer
+    participant Cache
+    participant DB as Database
+
+    User->>Browser: Click or navigate
+    Browser->>DNS: Resolve hostname
+    DNS-->>Browser: IP address
+    Browser->>LB: TCP + TLS + HTTP request
+    LB->>App: Forward request
+    App->>Cache: Check cache
+    alt Cache hit
+        Cache-->>App: Cached data
+    else Cache miss
+        App->>DB: Query
+        DB-->>App: Data
+        App->>Cache: Store in cache
+    end
+    App-->>LB: HTTP response
+    LB-->>Browser: Response
+    Browser-->>User: Render or use data
+```
 
 #### APIs
 
-_Notes to add._
+**API** = **Application Programming Interface** — an interface for programs (clients, services) to talk to each other, not a user interface.
+
+**REST** — Resource-oriented HTTP API. URLs = resources, HTTP methods = actions. Stateless, usually JSON. Client follows server's documented endpoints. **When to use:** Public or partner APIs, CRUD, stable resource model. Default for most web APIs. Good tooling, HTTP caching, easy to debug.
+
+**SOAP** — XML-based protocol; operations and types in WSDL. Runs over HTTP (or others). Heavy standards (WS-Security, etc.). **When:** Enterprise legacy (banks, old integrations). For new systems use REST or GraphQL. Interview: "SOAP = XML, WSDL, legacy; REST/GraphQL for new."
+
+**GraphQL** — Single endpoint (e.g. `POST /graphql`). Server exposes a **schema** (types, fields). Client sends a **query** with exact fields wanted; server returns only that shape. No over-fetching or under-fetching. Mutations for writes; subscriptions for real-time (often over WebSocket). **When to use:** Many client shapes (mobile vs web), avoid many REST endpoints. Trade-off: server implements resolvers; complex queries need care (depth limits, rate limiting).
+
+**RPC / gRPC** — RPC = Remote Procedure Call (client calls a "function" on server, e.g. `getUser(123)`). **gRPC:** Google's framework. **Protocol Buffers** (binary, typed). HTTP/2 → multiplexing, streaming (unary, server stream, client stream, bidirectional). Strong typing, codegen from `.proto`. **When to use:** Internal service-to-service, low latency, high throughput, streaming. Less ideal for browser-first public APIs. Interview: "gRPC for internal, REST/GraphQL for external or browser."
+
+**WebSockets** — Persistent **full-duplex** connection (both sides send anytime). Not request–response. After HTTP Upgrade handshake, data frames go both ways. Used for chat, live feeds, collaboration, gaming. It's a **transport** for real-time, not a "query API." GraphQL subscriptions often run over WebSockets. **When to use:** Real-time push, live updates, chat. For "give me this resource once," REST or GraphQL is enough.
+
+**When to use which:**
+
+| Need | Typical choice |
+|------|-----------------|
+| Public/partner API, CRUD, caching, simple | REST |
+| Many client shapes, flexible queries, one endpoint | GraphQL |
+| Internal services, performance, streaming | gRPC |
+| Real-time, push, bidirectional | WebSockets |
+| Legacy enterprise integration | SOAP (only when required) |
+
+**Optional deeper topics:** REST versioning, HATEOAS; GraphQL N+1 and DataLoader, query complexity limits; gRPC Protobuf, streaming, load balancing; WebSockets handshake, reconnection, scaling (sticky sessions, pub/sub).
 
 #### Databases: SQL vs NoSQL
 
-_Notes to add._
+**SQL (relational)** — Tables with primary/foreign keys, relations. ACID transactions (one step fails → whole transaction rolled back). Query with SQL. **Row-based** storage (default): each row stored together; good for OLTP (read/update whole rows). Examples: MySQL, PostgreSQL, Amazon Aurora, Azure SQL. **Scaling:** Vertical scaling works well; **horizontal** scaling (sharding) is harder (cross-shard joins, distributed transactions). **Note:** Apache Cassandra is **not** SQL — it's NoSQL (wide-column). **Columnar** storage (Redshift, BigQuery, Snowflake, ClickHouse) = different layout for **analytics** (read many rows, few columns); used for OLAP, often as a separate store from transactional SQL.
+
+**NoSQL** — Umbrella term; several types (not only "document"):
+
+| Type | What it is | Examples | Typical use |
+|------|------------|----------|-------------|
+| **Document** | Docs (JSON/BSON), nested, flexible schema | MongoDB | Nested data, flexible schema, content |
+| **Key-value** | Key → value; simple model | Redis, DynamoDB (simple key) | Cache, session, simple lookup |
+| **Wide-column** | Partition key + sort key; column families | Cassandra, DynamoDB, HBase | High write scale, time-series, access by partition |
+| **Graph** | Nodes + edges + properties | Neo4j, Neptune | Relationships (social, recommendations, fraud) |
+
+Document: flexible schema, avoid joins by embedding/denormalizing. Wide-column: partition-key access, high write throughput. Key-value: simple lookup. Graph: own query language (e.g. Cypher); relationship-heavy queries.
+
+**When to use which**
+
+- **SQL (relational):** Structured data, ACID, transactions, complex queries and joins, reporting. Scale vertically or accept sharding complexity. Examples: user accounts, orders, inventory, billing.
+- **Document (e.g. MongoDB):** Nested/variable structure, flexible schema, avoid joins. Product catalog, user profiles, content.
+- **Wide-column (Cassandra, DynamoDB):** Very high write scale, time-series, access by partition key; no joins, often eventual consistency. Events, metrics, feeds.
+- **Key-value (Redis, DynamoDB):** Simple key lookup; cache, session, feature flags.
+- **Graph:** Queries centered on relationships (friends of friends, shortest path, recommendations). Social graph, fraud, knowledge graph.
+- **Columnar (Redshift, BigQuery):** Analytics/OLAP — aggregate over many rows, few columns. Reporting, dashboards; usually separate from transactional DB.
+
+**Summary:** SQL = structured, ACID, joins, vertical scale. NoSQL = flexible or partition-oriented model, horizontal scale, often eventual consistency; pick by data shape (document / key-value / wide-column / graph). Cassandra = NoSQL wide-column. Columnar = analytics store.
 
 #### Networking basics
 
-_Notes to add._
+**Core metrics**
+
+- **Latency** — Time for one unit of work to go from A to B and back (or one-way). Often in ms. "How long does one request take?"
+- **RTT (Round-Trip Time)** — Time for a packet to go to a host and the response to come back. Same idea as latency for a single round trip. Used in TCP, timeouts, and "how far away is this service?"
+- **Bandwidth** — Max data rate a link can carry (e.g. bits/sec, Gbps). "How much can this pipe carry?"
+- **Throughput** — Actual data rate achieved (e.g. requests/sec, MB/s). Often limited by latency, bottlenecks, or protocol, not just bandwidth. "How much are we actually getting?"
+
+**Latency vs throughput (interview favorite)**
+
+- **Latency** = time per operation (e.g. 50 ms per request).
+- **Throughput** = operations per second (e.g. 1000 req/s).
+- They're related but different: high bandwidth doesn't fix high latency; many small requests can mean high throughput but each request still has latency.
+
+**Related terms**
+
+- **Packet loss** — Packets dropped (congestion, bad links). Drives retries, TCP behavior, and reliability design.
+- **Jitter** — Variation in latency (e.g. 20 ms sometimes, 80 ms other times). Matters for real-time and timeouts.
+- **Connection / socket** — One TCP connection; limits (e.g. max 65k ports per host) and connection pooling show up in design.
+- **Backpressure** — When a slow consumer tells the producer to slow down (see Part 2).
+- **Propagation delay vs transmission delay** — Propagation = time for a bit to travel (distance/speed of light); transmission = time to put the packet on the link (size/bandwidth). Both add to latency.
+
+**How this shows up in system design**
+
+- **Low latency** → Reduce RTT (e.g. region placement, CDN), avoid extra hops, use connection reuse.
+- **High throughput** → More concurrency, batching, pipelining; sometimes trade latency for throughput.
+- **Bandwidth** → Rarely the main bottleneck for APIs; latency and CPU/IO usually matter more.
+- **Rough numbers:** Same-DC RTT ~0.1–1 ms; cross-region tens to hundreds of ms; disk read ~ms; RAM ~μs.
+
+**Checklist:** Latency, RTT, bandwidth, throughput; difference between latency and throughput; packet loss; jitter; (optional) propagation vs transmission delay.
 
 ---
 
